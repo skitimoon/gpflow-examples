@@ -23,7 +23,7 @@ plt.plot(X1, Y1, 'x', mew=2)
 plt.plot(X2, Y2, 'x', mew=2)
 plt.plot(X3, Y3, 'x', mew=2)
 plt.savefig('Y.png')
-plt.clf()
+# plt.clf()
 # plt.show()
 
 # Augment the input with ones or zeros to indicate the required output dimension
@@ -41,15 +41,26 @@ Y_augmented = np.vstack((Y1_augmented, Y2_augmented, Y3_augmented))
 print(X_augmented.shape)
 print(Y_augmented.shape)
 
+# Kernel
 output_dim = 3  # Number of outputs
-rank = 3  # Rank of W
-k1 = gpflow.kernels.Matern32(1, active_dims=[0])  # Base kernel
+rank = 1  # Rank of W
+Q = 3
+k1 = gpflow.kernels.RBF(1, active_dims=[0])  # Base kernel
 coreg = gpflow.kernels.Coregion(1,
                                 output_dim=output_dim,
                                 rank=rank,
                                 active_dims=[1])  # Coregion kernel
 coreg.W = np.random.rand(output_dim, rank)  # Initialise the W matrix
 kern = k1 * coreg
+
+for _ in range(Q-1):
+    k1 = gpflow.kernels.RBF(1, active_dims=[0])  # Base kernel
+    coreg = gpflow.kernels.Coregion(1,
+                                    output_dim=output_dim,
+                                    rank=rank,
+                                    active_dims=[1])  # Coregion kernel
+    coreg.W = np.random.rand(output_dim, rank)  # Initialise the W matrix
+    kern += k1 * coreg
 
 # This likelihood switches between Gaussian noise with different variances for each f_i:
 # lik = gpflow.likelihoods.SwitchedLikelihood([
@@ -59,7 +70,7 @@ lik = SwitchedLikelihoodCoregion([
     gpflow.likelihoods.Gaussian()
 ])
 
-M = 7
+M = 10
 # initialisation of inducing input locations (M random points from the training inputs)
 Z = np.vstack((X1_augmented[np.random.choice(len(X1), M)],
                X2_augmented[np.random.choice(len(X2), M)],
@@ -88,7 +99,11 @@ m = SVGPCoregion(X_augmented,
 print(m)
 # print(m.read_trainables())
 # fit the covariance function parameters
-gpflow.train.ScipyOptimizer().minimize(m, maxiter=1000)
+# gpflow.train.ScipyOptimizer().minimize(m, maxiter=500, disp=True)
+gpflow.train.AdamOptimizer(0.01).minimize(m, maxiter=500)
+# gpflow.train.AdadeltaOptimizer(0.01).minimize(m, maxiter=2000)
+print(m.compute_log_likelihood())
+print(m)
 
 
 def plot_gp(x, mu, var, color, label):
@@ -107,6 +122,14 @@ def plot_f(m):
         print(mu[:4])
         print(mu.shape)
         plot_gp(Xtest.flat, mu.flat, var.flat, line.get_color(), f'Y{i}')
+    Xorig = np.linspace(0, 1, 100)
+    Y1 = np.sin(6 * Xorig)
+    Y2 = np.sin(6 * Xorig + 0.7)
+    Y3 = -np.sin(6 * Xorig + 0.7)
+    # plt.plot(Xorig, Y1, '--')
+    # plt.plot(Xorig, Y2, '--')
+    # plt.plot(Xorig, Y3, '--')
+    # plt.title(f'Q = {Q}, M = {M}')
     plt.legend()
 
 
@@ -124,29 +147,35 @@ def plot_y(m):
 
 
 plot_f(m)
-plt.savefig('Fpred.png')
+plt.savefig(f'FpredQ{Q}M{M}.png')
 plt.clf()
 plot_y(m)
-plt.savefig('Ypred.png')
+plt.savefig(f'YpredQ{Q}M{M}.png')
 plt.clf()
 # plt.show()
 
-B = coreg.W.value @ coreg.W.value.T + np.diag(coreg.kappa.value)
-print('B =\n', B)
-plt.imshow(B)
-plt.savefig('B.png')
-plt.clf()
-# plt.show()
+# B = coreg.W.value @ coreg.W.value.T + np.diag(coreg.kappa.value)
+# print('B =\n', B)
+# plt.imshow(B)
+# plt.savefig(f'BQ{Q}M{M}.png')
+# plt.clf()
+# # plt.show()
 
-Xtest = np.linspace(0, 1, 100)[:, None]
-Fpred, Fvar = m.predict_f(
-    np.vstack((np.hstack((Xtest, np.zeros_like(Xtest))),
-               np.hstack((Xtest, np.zeros_like(Xtest) + 1)),
-               np.hstack((Xtest, np.zeros_like(Xtest) + 2)))))
-print(Fpred.shape)
-print(Fvar.shape)
-print(Fpred[:2])
-print(Fvar[:2])
+# Xtest = np.linspace(0, 1, 100)[:, None]
+# Fpred, Fvar = m.predict_f(
+#     np.vstack((np.hstack((Xtest, np.zeros_like(Xtest))),
+#                np.hstack((Xtest, np.zeros_like(Xtest) + 1)),
+#                np.hstack((Xtest, np.zeros_like(Xtest) + 2)))))
+# print(Fpred.shape)
+# print(Fvar.shape)
+# print(Fpred[:2])
+# print(Fvar[:2])
 
-plt.plot(np.vstack([Xtest] * 3), Fpred)
-plt.savefig('/tmp/Fmulti.png')
+# X = np.linspace(0, 1, 100)
+# Y1 = np.sin(6 * X)
+# Y2 = np.sin(6 * X + 0.7)
+# Y3 = -np.sin(6 * X + 0.7)
+# plt.plot(X, Y1)
+# plt.plot(X, Y2)
+# plt.plot(X, Y3)
+# plt.savefig('data.png')
